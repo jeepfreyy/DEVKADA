@@ -58,7 +58,8 @@ export async function POST(req: NextRequest) {
 
 For calendar: extract title, date, time, description
   - date: can be "tomorrow", "today", day names (monday, tuesday, etc.), month names with day (november 15, nov 15, 15 november), or "next [day]"
-  - time: can be "2pm", "2:30pm", "14:00", "9pm", "two pm", etc.
+    IMPORTANT: If user mentions multiple dates (e.g., "november 22 and 23"), extract the FIRST date only. Create separate requests for each date.
+  - time: MUST include AM/PM. Examples: "5pm", "5:00pm", "17:00", "five pm". Extract the exact time mentioned.
   - title: the meeting/event title or description
   - description: any additional details
 
@@ -151,7 +152,39 @@ If intent is "chat", just respond normally without action.`,
       try {
         switch (assistantResponse.intent) {
           case 'calendar':
-            actionResult = await createCalendarEvent(assistantResponse.params)
+            // Check if multiple dates are mentioned (e.g., "november 22 and 23")
+            const dateStr = assistantResponse.params?.date || ''
+            const multipleDatesMatch = dateStr.match(/(\w+\s+\d+)\s+and\s+(\w+\s+\d+)/i)
+            
+            if (multipleDatesMatch) {
+              // Create events for both dates
+              const firstDate = multipleDatesMatch[1]
+              const secondDate = multipleDatesMatch[2]
+              
+              // Create first event
+              const firstParams = { ...assistantResponse.params, date: firstDate }
+              const firstResult = await createCalendarEvent(firstParams)
+              
+              // Create second event
+              const secondParams = { ...assistantResponse.params, date: secondDate }
+              const secondResult = await createCalendarEvent(secondParams)
+              
+              // Return combined result
+              actionResult = {
+                type: 'calendar',
+                success: firstResult.success && secondResult.success,
+                message: firstResult.success && secondResult.success
+                  ? `Created 2 calendar events: ${firstDate} and ${secondDate}`
+                  : `Created events with some issues. Check calendar for details.`,
+                data: {
+                  firstEvent: firstResult.data,
+                  secondEvent: secondResult.data,
+                },
+              }
+            } else {
+              // Single date
+              actionResult = await createCalendarEvent(assistantResponse.params)
+            }
             break
           case 'email':
             actionResult = await sendEmail(assistantResponse.params)
@@ -319,52 +352,79 @@ async function createCalendarEvent(params: any) {
       startDate = new Date(Date.now() + 24 * 60 * 60 * 1000)
     }
 
-    // Parse time
+    // Parse time - improved parsing
     let hours = 14 // Default 2pm
     let minutes = 0
     
     if (params.time) {
       const timeStr = params.time.toString().toLowerCase().trim()
+      console.log('Parsing time:', timeStr)
       
-      // Handle formats like "2", "2pm", "14:00", "2:30 PM", "two pm"
+      // Handle formats like "2", "2pm", "14:00", "2:30 PM", "two pm", "5pm"
       if (timeStr.includes(':')) {
-        // Format: "14:00" or "2:30 PM"
+        // Format: "14:00" or "2:30 PM" or "5:00pm"
         const parts = timeStr.split(':')
         hours = parseInt(parts[0], 10)
         minutes = parseInt(parts[1]?.replace(/\D/g, '') || '0', 10)
         
-        // Check for AM/PM
-        if (timeStr.includes('pm') && hours < 12) {
-          hours += 12
-        } else if (timeStr.includes('am') && hours === 12) {
-          hours = 0
+        // Check for AM/PM in the entire string
+        if (timeStr.includes('pm')) {
+          if (hours < 12) {
+            hours += 12
+          }
+        } else if (timeStr.includes('am')) {
+          if (hours === 12) {
+            hours = 0
+          }
         }
       } else {
-        // Format: "2", "2pm", "14", "two pm"
-        const timeMatch = timeStr.match(/(\d+)|(one|two|three|four|five|six|seven|eight|nine|ten|eleven|twelve)/i)
+        // Format: "2", "2pm", "5pm", "14", "two pm", "five pm"
+        // Better regex to capture number and am/pm separately
+        const timeMatch = timeStr.match(/(\d+)\s*(am|pm)?|(one|two|three|four|five|six|seven|eight|nine|ten|eleven|twelve)\s*(am|pm)?/i)
+        
         if (timeMatch) {
           if (timeMatch[1]) {
-            // Numeric
+            // Numeric format: "5pm", "5 pm", "5"
             hours = parseInt(timeMatch[1], 10)
-          } else if (timeMatch[2]) {
-            // Word format
+            const ampm = timeMatch[2]?.toLowerCase()
+            
+            if (ampm === 'pm') {
+              if (hours < 12) {
+                hours += 12
+              }
+            } else if (ampm === 'am') {
+              if (hours === 12) {
+                hours = 0
+              }
+            } else {
+              // No AM/PM specified - if 1-12, assume PM for business hours
+              if (hours >= 1 && hours <= 12) {
+                hours = hours === 12 ? 12 : hours + 12
+              }
+            }
+          } else if (timeMatch[3]) {
+            // Word format: "five pm", "two am"
             const wordToNum: { [key: string]: number } = {
               'one': 1, 'two': 2, 'three': 3, 'four': 4, 'five': 5,
               'six': 6, 'seven': 7, 'eight': 8, 'nine': 9, 'ten': 10,
               'eleven': 11, 'twelve': 12
             }
-            hours = wordToNum[timeMatch[2].toLowerCase()] || 14
-          }
-          
-          // Check for PM
-          if (timeStr.includes('pm') && hours < 12) {
-            hours += 12
-          } else if (timeStr.includes('am') && hours === 12) {
-            hours = 0
-          } else if (!timeStr.includes('am') && !timeStr.includes('pm')) {
-            // If no AM/PM specified and hour is 1-12, assume PM
-            if (hours >= 1 && hours <= 12) {
-              hours = hours === 12 ? 12 : hours + 12
+            hours = wordToNum[timeMatch[3].toLowerCase()] || 14
+            const ampm = timeMatch[4]?.toLowerCase()
+            
+            if (ampm === 'pm') {
+              if (hours < 12) {
+                hours += 12
+              }
+            } else if (ampm === 'am') {
+              if (hours === 12) {
+                hours = 0
+              }
+            } else {
+              // No AM/PM - assume PM
+              if (hours >= 1 && hours <= 12) {
+                hours = hours === 12 ? 12 : hours + 12
+              }
             }
           }
         }
@@ -372,18 +432,23 @@ async function createCalendarEvent(params: any) {
       
       // Validate hours and minutes
       if (isNaN(hours) || hours < 0 || hours > 23) {
+        console.warn('Invalid hours, defaulting to 2pm:', hours)
         hours = 14 // Default to 2pm
       }
       if (isNaN(minutes) || minutes < 0 || minutes > 59) {
         minutes = 0
       }
+      
+      console.log('Parsed time - hours:', hours, 'minutes:', minutes)
     }
 
     startDate.setHours(hours, minutes, 0, 0)
     
-    // Ensure date is in the future
-    if (startDate.getTime() < Date.now()) {
-      // If time has passed today, move to tomorrow
+    // Ensure date is in the future (but don't change the date if it's a specific future date)
+    const now = new Date()
+    // Only adjust if the date/time has passed AND no specific date was provided
+    if (startDate.getTime() < now.getTime() && !params.date) {
+      // Only move to tomorrow if no specific date was provided
       startDate.setDate(startDate.getDate() + 1)
     }
 
@@ -392,15 +457,19 @@ async function createCalendarEvent(params: any) {
     // Use user's timezone instead of UTC
     const timeZone = Intl.DateTimeFormat().resolvedOptions().timeZone || 'America/New_York'
     
+    // Format date/time properly for Google Calendar
+    const startISO = startDate.toISOString()
+    const endISO = endDate.toISOString()
+    
     const event = {
       summary: params.title || 'Meeting',
       description: params.description || '',
       start: {
-        dateTime: startDate.toISOString(),
+        dateTime: startISO,
         timeZone: timeZone,
       },
       end: {
-        dateTime: endDate.toISOString(),
+        dateTime: endISO,
         timeZone: timeZone,
       },
     }
@@ -412,31 +481,45 @@ async function createCalendarEvent(params: any) {
       calendarId,
       summary: event.summary,
       start: event.start.dateTime,
+      startLocal: startDate.toLocaleString(),
+      end: event.end.dateTime,
+      endLocal: endDate.toLocaleString(),
       timeZone: event.start.timeZone,
+      hours: hours,
+      minutes: minutes,
     })
 
-    const response = await calendar.events.insert({
-      calendarId: calendarId,
-      requestBody: event,
-    })
-
-    console.log('Event created successfully:', {
-      eventId: response.data.id,
-      htmlLink: response.data.htmlLink,
-      calendarId: response.data.organizer?.email || calendarId,
-    })
-
-    return {
-      type: 'calendar',
-      success: true,
-      message: `Calendar event "${event.summary}" created successfully! Click the link below to view it.`,
-      data: {
-        eventId: response.data.id,
-        eventLink: response.data.htmlLink,
-        startTime: startDate.toISOString(),
+    try {
+      const response = await calendar.events.insert({
         calendarId: calendarId,
-        timeZone: timeZone,
-      },
+        requestBody: event,
+      })
+
+      console.log('Event created successfully:', {
+        eventId: response.data.id,
+        htmlLink: response.data.htmlLink,
+        calendarId: response.data.organizer?.email || calendarId,
+        start: response.data.start?.dateTime,
+        end: response.data.end?.dateTime,
+      })
+
+      return {
+        type: 'calendar',
+        success: true,
+        message: `Calendar event "${event.summary}" created successfully for ${startDate.toLocaleDateString()} at ${startDate.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}! Click the link below to view it.`,
+        data: {
+          eventId: response.data.id,
+          eventLink: response.data.htmlLink,
+          startTime: startDate.toISOString(),
+          startTimeLocal: startDate.toLocaleString(),
+          endTime: endDate.toISOString(),
+          calendarId: calendarId,
+          timeZone: timeZone,
+        },
+      }
+    } catch (insertError: any) {
+      console.error('Calendar insert error:', insertError)
+      throw insertError
     }
   } catch (error: any) {
     console.error('Calendar error:', error)
