@@ -429,7 +429,20 @@ async function sendEmail(params: any) {
     return {
       type: 'email',
       success: false,
-      message: 'Email integration not configured. Please set up Resend API key.',
+      message: 'Email integration not configured. Please set up Resend API key in .env.local',
+      data: null,
+    }
+  }
+
+  // Validate email address
+  const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
+  const toEmail = params.to || 'demo@example.com'
+  
+  if (!emailRegex.test(toEmail)) {
+    return {
+      type: 'email',
+      success: false,
+      message: `Invalid email address: ${toEmail}. Please provide a valid email address.`,
       data: null,
     }
   }
@@ -438,32 +451,71 @@ async function sendEmail(params: any) {
     const { Resend } = await import('resend')
     const resend = new Resend(process.env.RESEND_API_KEY)
 
+    const fromEmail = process.env.RESEND_FROM_EMAIL || 'onboarding@resend.dev'
+    
+    console.log('Sending email:', {
+      from: fromEmail,
+      to: toEmail,
+      subject: params.subject || 'Message from AI Agent',
+    })
+
     const { data, error } = await resend.emails.send({
-      from: process.env.RESEND_FROM_EMAIL || 'onboarding@resend.dev',
-      to: params.to || 'demo@example.com',
+      from: fromEmail,
+      to: toEmail,
       subject: params.subject || 'Message from AI Agent',
       html: `<p>${params.body || 'This is an automated message from your AI Agent.'}</p>`,
     })
 
     if (error) {
-      throw error
+      console.error('Resend API error:', error)
+      let errorMessage = 'Failed to send email.'
+      
+      if (error.message) {
+        if (error.message.includes('Invalid API key') || error.message.includes('Unauthorized')) {
+          errorMessage = 'Resend API: Invalid API key. Please check your RESEND_API_KEY in .env.local'
+        } else if (error.message.includes('domain') || error.message.includes('not verified')) {
+          errorMessage = `Resend API: Domain not verified. The "from" email (${fromEmail}) must use a verified domain. Check your Resend dashboard or use onboarding@resend.dev for testing.`
+        } else if (error.message.includes('rate limit') || error.message.includes('quota')) {
+          errorMessage = 'Resend API: Rate limit exceeded. Please try again later.'
+        } else {
+          errorMessage = `Resend API Error: ${error.message}`
+        }
+      }
+      
+      return {
+        type: 'email',
+        success: false,
+        message: errorMessage,
+        data: null,
+      }
     }
+
+    console.log('Email sent successfully:', {
+      emailId: data?.id,
+      to: toEmail,
+    })
 
     return {
       type: 'email',
       success: true,
-      message: `Email sent successfully to ${params.to}!`,
+      message: `Email sent successfully to ${toEmail}!`,
       data: {
         emailId: data?.id,
-        to: params.to,
+        to: toEmail,
       },
     }
-  } catch (error) {
+  } catch (error: any) {
     console.error('Email error:', error)
+    let errorMessage = 'Failed to send email.'
+    
+    if (error?.message) {
+      errorMessage = `Resend API Error: ${error.message}`
+    }
+    
     return {
       type: 'email',
       success: false,
-      message: 'Failed to send email. Please check your Resend API key.',
+      message: errorMessage,
       data: null,
     }
   }
