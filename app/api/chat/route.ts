@@ -121,23 +121,47 @@ If intent is "chat", just respond normally without action.`,
 }
 
 async function createCalendarEvent(params: any) {
-  if (!process.env.GOOGLE_CLIENT_EMAIL || !process.env.GOOGLE_PRIVATE_KEY) {
+  // Check for OAuth credentials (user account) first
+  const hasOAuth = process.env.GOOGLE_CLIENT_ID && process.env.GOOGLE_CLIENT_SECRET && process.env.GOOGLE_REFRESH_TOKEN
+  // Check for service account credentials
+  const hasServiceAccount = process.env.GOOGLE_CLIENT_EMAIL && process.env.GOOGLE_PRIVATE_KEY
+
+  if (!hasOAuth && !hasServiceAccount) {
     return {
       type: 'calendar',
       success: false,
-      message: 'Calendar integration not configured. Please set up Google Calendar API credentials.',
+      message: 'Calendar integration not configured. Please set up Google Calendar API credentials (either OAuth or Service Account).',
       data: null,
     }
   }
 
   try {
     const { google } = await import('googleapis')
-    const auth = new google.auth.JWT(
-      process.env.GOOGLE_CLIENT_EMAIL,
-      undefined,
-      process.env.GOOGLE_PRIVATE_KEY?.replace(/\\n/g, '\n'),
-      ['https://www.googleapis.com/auth/calendar']
-    )
+    let auth
+
+    if (hasOAuth) {
+      // OAuth2 user account authentication
+      const oauth2Client = new google.auth.OAuth2(
+        process.env.GOOGLE_CLIENT_ID,
+        process.env.GOOGLE_CLIENT_SECRET,
+        process.env.GOOGLE_REDIRECT_URI || 'http://localhost:3000/api/auth/callback'
+      )
+
+      // Set the refresh token
+      oauth2Client.setCredentials({
+        refresh_token: process.env.GOOGLE_REFRESH_TOKEN,
+      })
+
+      auth = oauth2Client
+    } else {
+      // Service account JWT authentication
+      auth = new google.auth.JWT(
+        process.env.GOOGLE_CLIENT_EMAIL,
+        undefined,
+        process.env.GOOGLE_PRIVATE_KEY?.replace(/\\n/g, '\n'),
+        ['https://www.googleapis.com/auth/calendar']
+      )
+    }
 
     const calendar = google.calendar({ version: 'v3', auth })
 

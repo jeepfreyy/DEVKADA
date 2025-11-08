@@ -38,10 +38,16 @@ Create a `.env.local` file in the root directory:
 # Required: OpenRouter API Key (free tier available)
 OPENROUTER_API_KEY=your_openrouter_api_key_here
 
-# Optional: Google Calendar API (for calendar events)
-GOOGLE_CLIENT_EMAIL=your_service_account_email@project.iam.gserviceaccount.com
-GOOGLE_PRIVATE_KEY="-----BEGIN PRIVATE KEY-----\n...\n-----END PRIVATE KEY-----\n"
-GOOGLE_CALENDAR_ID=primary
+# Optional: Google Calendar API - OAuth User Account (choose this OR service account below)
+GOOGLE_CLIENT_ID=your_client_id_from_oauth_json
+GOOGLE_CLIENT_SECRET=your_client_secret_from_oauth_json
+GOOGLE_REFRESH_TOKEN=your_refresh_token_from_oauth_flow
+GOOGLE_REDIRECT_URI=http://localhost:3000/api/auth/google/callback
+
+# Optional: Google Calendar API - Service Account (choose this OR OAuth above)
+# GOOGLE_CLIENT_EMAIL=your_service_account_email@project.iam.gserviceaccount.com
+# GOOGLE_PRIVATE_KEY="-----BEGIN PRIVATE KEY-----\n...\n-----END PRIVATE KEY-----\n"
+# GOOGLE_CALENDAR_ID=primary
 
 # Optional: Resend API Key (for email sending - free tier available)
 RESEND_API_KEY=your_resend_api_key_here
@@ -76,6 +82,35 @@ Navigate to [http://localhost:3000](http://localhost:3000)
 
 ### Google Calendar (Optional)
 
+You can use either **OAuth (User Account)** or **Service Account**. OAuth is simpler for personal use.
+
+#### Option 1: OAuth User Account (Recommended for personal use)
+
+1. Go to [Google Cloud Console](https://console.cloud.google.com/)
+2. Create a new project or select existing
+3. Enable Google Calendar API
+4. Go to **APIs & Services** → **Credentials**
+5. Click **Create Credentials** → **OAuth client ID**
+6. Choose **Web application**
+7. Add authorized redirect URI: `http://localhost:3000/api/auth/google/callback` (or your deployed URL)
+8. Download the JSON file
+9. From the JSON file, extract:
+   - `client_id` → `GOOGLE_CLIENT_ID`
+   - `client_secret` → `GOOGLE_CLIENT_SECRET`
+10. Add to `.env.local`:
+    ```env
+    GOOGLE_CLIENT_ID=your_client_id_here
+    GOOGLE_CLIENT_SECRET=your_client_secret_here
+    GOOGLE_REDIRECT_URI=http://localhost:3000/api/auth/google/callback
+    ```
+11. Get refresh token:
+    - Visit: `http://localhost:3000/api/auth/google`
+    - Authorize the app
+    - Copy the refresh token shown
+    - Add to `.env.local`: `GOOGLE_REFRESH_TOKEN=your_refresh_token_here`
+
+#### Option 2: Service Account
+
 1. Go to [Google Cloud Console](https://console.cloud.google.com/)
 2. Create a new project or select existing
 3. Enable Google Calendar API
@@ -83,6 +118,12 @@ Navigate to [http://localhost:3000](http://localhost:3000)
 5. Download JSON credentials
 6. Extract `client_email` and `private_key` from JSON
 7. Share your calendar with the service account email
+8. Add to `.env.local`:
+    ```env
+    GOOGLE_CLIENT_EMAIL=your_service_account_email@project.iam.gserviceaccount.com
+    GOOGLE_PRIVATE_KEY="-----BEGIN PRIVATE KEY-----\n...\n-----END PRIVATE KEY-----\n"
+    GOOGLE_CALENDAR_ID=primary
+    ```
 
 ### Resend (Optional - for emails)
 
