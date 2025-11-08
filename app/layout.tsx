@@ -5,7 +5,7 @@ import './globals.css'
 const inter = Inter({ subsets: ['latin'] })
 
 export const metadata: Metadata = {
-  title: 'AI Agent - Multi-Action Assistant',
+  title: 'RetornSsistant - Multi-Action Assistant',
   description: 'An AI agent that understands user intent and performs actions like calendar events, emails, weather, and UI generation',
 }
 
