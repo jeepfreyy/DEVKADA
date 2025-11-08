@@ -7,24 +7,43 @@ interface Message {
 
 export async function POST(req: NextRequest) {
   try {
+    // Check if API key is configured
+    if (!process.env.OPENROUTER_API_KEY) {
+      return NextResponse.json(
+        { 
+          message: 'AI service is not configured. Please contact the administrator.',
+          actionResult: null
+        },
+        { status: 503 }
+      )
+    }
+
     const { messages } = await req.json()
 
     if (!messages || !Array.isArray(messages)) {
       return NextResponse.json(
-        { error: 'Invalid messages format' },
+        { 
+          message: 'Invalid request format. Please try again.',
+          actionResult: null
+        },
         { status: 400 }
       )
     }
 
     const lastMessage = messages[messages.length - 1]?.content || ''
 
+    // Get base URL for production (Vercel provides this automatically)
+    const baseUrl = process.env.NEXT_PUBLIC_BASE_URL || 
+                    process.env.VERCEL_URL ? `https://${process.env.VERCEL_URL}` : 
+                    'http://localhost:3000'
+
     // Use OpenRouter API to understand intent and determine action
     const openRouterResponse = await fetch('https://openrouter.ai/api/v1/chat/completions', {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
-        'Authorization': `Bearer ${process.env.OPENROUTER_API_KEY || ''}`,
-        'HTTP-Referer': process.env.NEXT_PUBLIC_BASE_URL || 'http://localhost:3000',
+        'Authorization': `Bearer ${process.env.OPENROUTER_API_KEY}`,
+        'HTTP-Referer': baseUrl,
         'X-Title': 'AI Agent Assistant',
       },
       body: JSON.stringify({
@@ -68,11 +87,13 @@ If intent is "chat", just respond normally without action.`,
       } catch (e) {
         // If not JSON, use the raw error text
         if (errorText.includes('401') || errorText.includes('Unauthorized')) {
-          errorMessage = 'Invalid API key. Please check your OPENROUTER_API_KEY in .env.local'
+          errorMessage = 'AI service authentication failed. The service may be temporarily unavailable.'
         } else if (errorText.includes('429') || errorText.includes('rate limit')) {
-          errorMessage = 'Rate limit exceeded. Please try again in a moment.'
+          errorMessage = 'Service is busy. Please wait a moment and try again.'
+        } else if (errorText.includes('500') || errorText.includes('Internal Server Error')) {
+          errorMessage = 'The AI service is experiencing issues. Please try again in a moment.'
         } else {
-          errorMessage = `AI Service Error: ${errorText.substring(0, 100)}`
+          errorMessage = 'The AI service is temporarily unavailable. Please try again.'
         }
       }
       
@@ -157,16 +178,34 @@ If intent is "chat", just respond normally without action.`,
       message: assistantResponse.message || 'I processed your request.',
       actionResult,
     })
-  } catch (error) {
+  } catch (error: any) {
     console.error('Chat API error:', error)
+    
+    // Don't expose internal errors to users in production
+    const isProduction = process.env.NODE_ENV === 'production'
+    
     return NextResponse.json(
       { 
-        message: 'Sorry, I encountered an error. Please try again.',
+        message: isProduction 
+          ? 'Sorry, I encountered an error. Please try again in a moment.'
+          : `Error: ${error.message || 'Unknown error'}`,
         actionResult: null
       },
       { status: 500 }
     )
   }
+}
+
+// Add CORS headers for API routes
+export async function OPTIONS(req: NextRequest) {
+  return new NextResponse(null, {
+    status: 200,
+    headers: {
+      'Access-Control-Allow-Origin': '*',
+      'Access-Control-Allow-Methods': 'POST, OPTIONS',
+      'Access-Control-Allow-Headers': 'Content-Type',
+    },
+  })
 }
 
 async function createCalendarEvent(params: any) {
@@ -451,6 +490,8 @@ async function sendEmail(params: any) {
     const { Resend } = await import('resend')
     const resend = new Resend(process.env.RESEND_API_KEY)
 
+    // Use Resend's test domain by default (no verification needed)
+    // For production, you need to verify your domain in Resend dashboard
     const fromEmail = process.env.RESEND_FROM_EMAIL || 'onboarding@resend.dev'
     
     console.log('Sending email:', {

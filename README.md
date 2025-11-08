@@ -51,7 +51,9 @@ GOOGLE_REDIRECT_URI=http://localhost:3000/api/auth/google/callback
 
 # Optional: Resend API Key (for email sending - free tier available)
 RESEND_API_KEY=your_resend_api_key_here
-RESEND_FROM_EMAIL=noreply@yourdomain.com
+# Use onboarding@resend.dev for testing (no domain verification needed)
+# For production, verify your domain in Resend and use your verified email
+RESEND_FROM_EMAIL=onboarding@resend.dev
 
 # Optional: Weather API (OpenWeatherMap - free tier available)
 WEATHER_API_KEY=your_openweather_api_key_here
@@ -128,9 +130,12 @@ You can use either **OAuth (User Account)** or **Service Account**. OAuth is sim
 ### Resend (Optional - for emails)
 
 1. Sign up at [Resend.com](https://resend.com/)
-2. Verify your domain (or use their test domain)
-3. Get your API key from dashboard
-4. Free tier: 3,000 emails/month
+2. Get your API key from dashboard
+3. **For testing**: Use `onboarding@resend.dev` as `RESEND_FROM_EMAIL` (no verification needed)
+4. **For production**: Verify your domain in Resend dashboard and use your verified domain
+5. Free tier: 3,000 emails/month
+
+**Important**: Resend requires verified domains. Free domains (like Vercel's default domains) won't work. Use `onboarding@resend.dev` for testing, or verify your own domain for production.
 
 ### OpenWeatherMap (Optional - for weather)
 
@@ -226,8 +231,15 @@ Update `NEXT_PUBLIC_BASE_URL` with the ngrok URL.
 
 1. Push your code to GitHub
 2. Import project in Vercel
-3. Add environment variables in Vercel dashboard
-4. Deploy!
+3. **Add ALL environment variables in Vercel dashboard**:
+   - Go to Settings → Environment Variables
+   - Add all variables from your `.env.local`
+   - Set for Production, Preview, and Development
+4. **Update Google OAuth redirect URI** (if using Calendar):
+   - Add your Vercel URL: `https://your-app.vercel.app/api/auth/google/callback`
+5. Deploy!
+
+**Important**: See `VERCEL_DEPLOYMENT.md` for detailed deployment instructions and troubleshooting.
 
 ### Other Platforms
 

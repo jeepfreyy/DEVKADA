@@ -22,7 +22,8 @@ export async function GET() {
       hasApiKey: true,
       fromEmail: fromEmail,
       message: 'Resend API key is configured. Try sending an email through the chat to test.',
-      note: 'If emails fail, check: 1) API key is correct, 2) Domain is verified in Resend dashboard, 3) RESEND_FROM_EMAIL uses a verified domain (or use onboarding@resend.dev for testing)',
+      note: 'IMPORTANT: Resend requires verified domains. Free domains (like Vercel) won\'t work. Use onboarding@resend.dev for testing (no verification needed). For production, verify your domain in Resend dashboard.',
+      usingTestDomain: fromEmail === 'onboarding@resend.dev',
     })
   } catch (error: any) {
     return NextResponse.json({
