@@ -7,10 +7,74 @@ export async function GET(req: NextRequest) {
     const code = searchParams.get('code')
 
     if (!code) {
-      return NextResponse.json(
-        { error: 'No authorization code provided' },
-        { status: 400 }
-      )
+      // Show helpful HTML page if accessed directly
+      const html = `
+        <!DOCTYPE html>
+        <html>
+          <head>
+            <title>OAuth Setup</title>
+            <style>
+              body {
+                font-family: system-ui, -apple-system, sans-serif;
+                max-width: 600px;
+                margin: 50px auto;
+                padding: 20px;
+                background: #f5f5f5;
+              }
+              .container {
+                background: white;
+                padding: 30px;
+                border-radius: 8px;
+                box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+              }
+              h1 { color: #ea4335; }
+              .info {
+                background: #e3f2fd;
+                padding: 15px;
+                border-radius: 4px;
+                margin: 20px 0;
+                border-left: 4px solid #2196f3;
+              }
+              .button {
+                display: inline-block;
+                background: #1a73e8;
+                color: white;
+                padding: 12px 24px;
+                border-radius: 4px;
+                text-decoration: none;
+                margin: 10px 0;
+              }
+              .button:hover {
+                background: #1557b0;
+              }
+            </style>
+          </head>
+          <body>
+            <div class="container">
+              <h1>⚠️ OAuth Setup Required</h1>
+              
+              <div class="info">
+                <p><strong>You accessed the callback URL directly.</strong></p>
+                <p>To get your refresh token, you need to start the OAuth flow from the beginning:</p>
+                <ol>
+                  <li>Click the button below to start authorization</li>
+                  <li>Google will ask you to authorize the app</li>
+                  <li>After authorization, you'll be redirected back here with your refresh token</li>
+                </ol>
+              </div>
+
+              <a href="/api/auth/google" class="button">Start Google OAuth Authorization</a>
+              
+              <p style="margin-top: 30px;">
+                <a href="/" style="color: #1a73e8;">← Back to Chat</a>
+              </p>
+            </div>
+          </body>
+        </html>
+      `
+      return new NextResponse(html, {
+        headers: { 'Content-Type': 'text/html' },
+      })
     }
 
     const clientId = process.env.GOOGLE_CLIENT_ID
